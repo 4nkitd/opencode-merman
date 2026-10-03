@@ -34,3 +34,14 @@ Two V2.0.22 integration constraints were reproduced and fixed:
 ## Coverage boundary
 
 Passing this suite establishes support for the tested diagram families and supported grammar described in `README.md`. It does not establish complete compatibility with every Mermaid browser feature. Advanced unsupported syntax is rejected rather than silently discarded.
+
+## One-command installer and 0.1.1 packaging
+
+- Added a Node.js executable for `npx opencode-merman@latest install` and a persistent-checkout `install --local` route.
+- Installer tests cover stable V2 version bounds, V1 refusal before writes, XDG settings, JSONC comments inside unrelated plugin options, exact backups, existing permissions, idempotence, updates, config symlinks, dangling-symlink refusal, and duplicate-key refusal.
+- The package executable was exercised through `npm exec` from a real tarball with isolated settings; repeat installation was a no-op. This does not establish npm registry publication.
+- A clean package rendering test initially failed because optional peers and `--legacy-peer-deps` omitted OpenTUI core. The runtime dependency declaration and GitHub installation command were corrected. A fresh tarball with production-only npm dependencies then visibly rendered all 22 samples in installed OpenCode 2.0.22, with no raw chart/class source.
+- YAML is patched to 2.8.3 for GHSA-48c2-rrv3-qjmp, the deeply nested collection stack-overflow advisory.
+- Four SVG and text previews are generated from actual installed OpenCode terminal captures. They preserve character layout and intentionally omit captured terminal colors. No prompts, credentials, account information, or real conversation content are included.
+- Release checks pass with 692 renderer tests, 12 installer tests, and TypeScript checks. The production-only clean package npm audit reports zero vulnerabilities.
+- npm registry publication is pending operator authentication. Do not treat the local tarball or successful executable test as a published npm release.

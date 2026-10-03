@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { resolve } from "node:path"
 
 const directory = resolve(import.meta.dir, "..")
+const pluginDirectory = resolve(process.argv[2] ?? directory)
 const artifacts = resolve(directory, "artifacts")
 await mkdir(artifacts, { recursive: true })
 
@@ -62,7 +63,7 @@ for (const enabled of [false, true]) {
         animations: false,
         attention: { notifications: false, sound: false },
         session: { sidebar: "hide", markdown: "rendered" },
-        plugins: enabled ? ["-opencode.merman", directory] : [],
+        plugins: enabled ? ["-opencode.merman", pluginDirectory] : [],
       }),
     },
     size: { cols: 120, rows: 900 },
