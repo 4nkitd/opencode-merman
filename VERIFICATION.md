@@ -44,4 +44,6 @@ Passing this suite establishes support for the tested diagram families and suppo
 - YAML is patched to 2.8.3 for GHSA-48c2-rrv3-qjmp, the deeply nested collection stack-overflow advisory.
 - Four SVG and text previews are generated from actual installed OpenCode terminal captures. They preserve character layout and intentionally omit captured terminal colors. No prompts, credentials, account information, or real conversation content are included.
 - Release checks pass with 692 renderer tests, 12 installer tests, and TypeScript checks. The production-only clean package npm audit reports zero vulnerabilities.
-- npm registry publication is pending operator authentication. Do not treat the local tarball or successful executable test as a published npm release.
+- Published `opencode-merman@0.1.1` publicly on npm after the operator completed publish-time 2FA approval. Registry metadata confirms version 0.1.1 and the `latest` tag.
+- Tested `npx --yes opencode-merman@latest install` with a fresh npm cache and isolated CLI settings. First execution configured the pinned version; the second was a no-op.
+- Installed OpenCode 2.0.22 also visibly rendered all 22 fixtures using the actual npm package reference `opencode-merman@0.1.1`, not a local checkout path. The public npm install and registry-loaded renderer are verified working.

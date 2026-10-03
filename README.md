@@ -10,13 +10,11 @@ Requires Node.js 20+, npm, and `opencode` on PATH. Restart the terminal client a
 
 ### npm
 
-**Registry publication is pending.** Once published:
-
 ```sh
 npx --yes opencode-merman@latest install
 ```
 
-### GitHub with npm, available now
+### GitHub with npm
 
 Package-only install; this does **not** activate the OpenCode plugin:
 
