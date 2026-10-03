@@ -1,4 +1,6 @@
 export type MermaidDiagramKind = "flowchart" | "sequence" | "state" | "timeline" | "gitGraph" | "gantt"
+  | "xychart" | "pie" | "quadrant" | "sankey" | "class" | "er" | "requirement"
+  | "mindmap" | "journey" | "kanban" | "block" | "packet" | "architecture"
 
 /** An otherwise valid diagram contains syntax that this renderer does not support. */
 export class MermaidSyntaxError extends Error {

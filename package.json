@@ -1,10 +1,17 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode/merman",
-  "version": "2.0.22",
-  "private": true,
+  "name": "opencode-merman",
+  "version": "0.1.0",
+  "description": "Native terminal Mermaid rendering for OpenCode V2, derived from the official Merman renderer",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/4nkitd/opencode-merman.git"
+  },
   "type": "module",
   "exports": {
+    ".": "./src/markdown.ts",
+    "./tui": "./tui.ts",
     "./markdown": "./src/markdown.ts",
     "./palette": "./src/palette.ts",
     "./plugin": "./src/plugin.ts"
@@ -12,17 +19,31 @@
   "scripts": {
     "audit:layouts": "bun run script/layout-audit.ts",
     "test": "bun test --timeout 30000 --only-failures",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check": "bun run typecheck && bun run test"
   },
   "dependencies": {
-    "@opencode/plugin": "workspace:*",
-    "@opentui/core": "catalog:",
     "entities": "7.0.1",
-    "string-width": "catalog:"
+    "string-width": "7.2.0",
+    "yaml": "2.8.1"
+  },
+  "peerDependencies": {
+    "@opencode/plugin": ">=2.0.22",
+    "@opentui/core": ">=0.5.14 <0.6",
+    "@opentui/solid": ">=0.5.14 <0.6",
+    "solid-js": "^1.9.12"
   },
   "devDependencies": {
-    "@tsconfig/bun": "catalog:",
-    "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "@opencode/plugin": "2.0.22",
+    "@opentui/core": "0.5.14",
+    "@opentui/solid": "0.5.14",
+    "@tsconfig/bun": "1.0.9",
+    "@types/bun": "latest",
+    "solid-js": "1.9.12",
+    "typescript": "^5.9.3"
+  },
+  "files": ["tui.ts", "src", "examples", "LICENSE", "UPSTREAM.md", "README.md"],
+  "engines": {
+    "bun": ">=1.3.0"
   }
 }

@@ -9,7 +9,7 @@ import {
   type MouseEvent,
   type RenderContext,
   type RGBA,
-  type StyledText,
+  StyledText,
 } from "@opentui/core"
 import { MermaidSyntaxError } from "./diagnostics.js"
 import type { OpenCodeDiagramPalette } from "./palette.js"
@@ -39,6 +39,9 @@ import { drawTimelineDiagramGrid } from "./timeline/drawing.js"
 import { parseMermaidTimelineDiagram } from "./timeline/parser.js"
 import { renderTimelineGridStyledText } from "./timeline/render-grid.js"
 import { resolveTimelineStyleColors } from "./timeline/style.js"
+import { MermaidConfigError, normalizeMermaid, configuredOptions } from "./frontmatter.js"
+import { renderExtra } from "./extra/index.js"
+import { diagramTextGraphemes, diagramTextWidth } from "./core/text.js"
 
 type DiagramKind = NonNullable<ReturnType<typeof detectMermaidDiagram>>
 
@@ -57,6 +60,7 @@ export interface MermaidMarkdownRendererOptions {
   /** Gantt-specific terminal rendering options. */
   gantt?: Omit<GanttDiagramRenderOptions, "layoutMaxWidth">
   colors?: Partial<Record<keyof OpenCodeDiagramPalette, ColorInput>>
+  seriesColors?: string[]
 }
 
 function color(value: ColorInput | undefined): RGBA | undefined {
@@ -64,7 +68,9 @@ function color(value: ColorInput | undefined): RGBA | undefined {
 }
 
 class StaticDiagramRenderable extends TextRenderable {
-  constructor(ctx: RenderContext, prepared: PreparedDiagram) {
+  private measuredWidth = 0
+
+  constructor(ctx: RenderContext, prepared: PreparedDiagram, private readonly reflow: (width: number) => PreparedDiagram) {
     super(ctx, {
       content: prepared.text,
       width: "100%",
@@ -107,6 +113,43 @@ class StaticDiagramRenderable extends TextRenderable {
       event.stopPropagation()
     }
   }
+
+  protected override onResize(width: number, height: number): void {
+    super.onResize(width, height)
+    width = Math.floor(width)
+    if (!this.reflow || width <= 0 || width === this.measuredWidth) return
+    this.measuredWidth = width
+    try {
+      const next = this.reflow(width)
+      this.content = next.text
+      this.height = next.height
+    } catch (error) {
+      if (!(error instanceof MermaidSyntaxError || error instanceof DiagramCanvasSizeError || error instanceof MermaidConfigError)) throw error
+    }
+  }
+}
+
+function titled(prepared: PreparedDiagram, title: string | undefined, width: number, options: MermaidMarkdownRendererOptions): PreparedDiagram {
+  if (!title) return prepared
+  let lineWidth = 0
+  let caption = ""
+  let lines = 1
+  for (const grapheme of diagramTextGraphemes(title)) {
+    const size = Math.max(1, diagramTextWidth(grapheme))
+    if (size > width) throw new MermaidConfigError("Title cannot fit this terminal width")
+    if (lineWidth + size > width) {
+      caption += "\n"
+      lines++
+      lineWidth = 0
+    }
+    caption += grapheme
+    lineWidth += size
+  }
+  return {
+    ...prepared,
+    text: new StyledText([{ __isChunk: true, text: caption + "\n", fg: color(options.colors?.text) }, ...prepared.text.chunks]),
+    height: prepared.height + lines,
+  }
 }
 
 function prepareDiagram(
@@ -117,6 +160,8 @@ function prepareDiagram(
 ): PreparedDiagram {
   const colors = options.colors ?? {}
   const compact = options.compact ?? true
+  const extra = renderExtra(source, { width: layoutMaxWidth, colors, seriesColors: options.seriesColors })
+  if (extra) return { kind, source, ...extra }
   switch (kind) {
     case "flowchart": {
       const grid = drawFlowchartDiagramGrid(parseMermaidFlowchartDiagram(source), {
@@ -255,6 +300,7 @@ function prepareDiagram(
       }
     }
   }
+  throw new MermaidSyntaxError(kind, 1, source.split("\n")[0], "Unsupported diagram")
 }
 
 /** Create an OpenTUI Markdown node renderer for fenced Mermaid diagrams. */
@@ -271,49 +317,62 @@ export function createMermaidCodeBlockRenderer(
 ): MarkdownCodeBlockRenderer {
   const lastGood = new Map<string, PreparedDiagram>()
   return (token, context) => {
-    const kind = detectMermaidDiagram(token.text)
+    let normalized: ReturnType<typeof normalizeMermaid>
+    let options: MermaidMarkdownRendererOptions
+    try {
+      normalized = normalizeMermaid(token.text)
+      options = configuredOptions(normalized.config, typeof input === "function" ? input() : input)
+    } catch (error) {
+      if (error instanceof MermaidConfigError) return undefined
+      throw error
+    }
+    const kind = detectMermaidDiagram(normalized.source)
     if (!kind) return undefined
     // OpenTUI's default block ID is the stable identity available for this fence across streaming updates.
     const key = context.defaultRender()?.id
-    const options = typeof input === "function" ? input() : input
     const configuredMaxWidth =
       options.layoutMaxWidth === undefined ? 120 : Math.max(1, Math.trunc(options.layoutMaxWidth))
     const layoutMaxWidth = Math.min(configuredMaxWidth, Math.max(1, Math.trunc(ctx.width)))
+    const create = (prepared: PreparedDiagram) => new StaticDiagramRenderable(ctx, prepared, (width) => {
+      const available = Math.min(configuredMaxWidth, width)
+      return titled(prepareDiagram(kind, prepared.source, options, available), normalized.title, available, options)
+    })
 
     try {
-      const prepared = prepareDiagram(kind, token.text, options, layoutMaxWidth)
-      const diagram = new StaticDiagramRenderable(ctx, prepared)
+      const prepared = titled(prepareDiagram(kind, normalized.source, options, layoutMaxWidth), normalized.title, layoutMaxWidth, options)
+      const diagram = create(prepared)
       if (key) claimLastGood(key, prepared, diagram, lastGood)
       return diagram
     } catch (error) {
       if (error instanceof MermaidSyntaxError) {
         const previous = key ? lastGood.get(key) : undefined
         if (previous?.kind === kind) {
-          const diagram = new StaticDiagramRenderable(ctx, previous)
+          const diagram = create(previous)
           claimLastGood(key!, previous, diagram, lastGood)
           return diagram
         }
 
-        const lines = token.text.split("\n")
+        if (!["flowchart", "sequence", "state", "timeline", "gitGraph", "gantt"].includes(kind)) return undefined
+        const lines = normalized.source.split("\n")
         if (error.lineNumber <= 2 || lines.slice(error.lineNumber).some((line) => line.trim())) return undefined
 
         try {
-          const prepared = prepareDiagram(
+          const prepared = titled(prepareDiagram(
             kind,
             lines.slice(0, error.lineNumber - 1).join("\n"),
             options,
             layoutMaxWidth,
-          )
+          ), normalized.title, layoutMaxWidth, options)
           if (!prepared.height) return undefined
-          const diagram = new StaticDiagramRenderable(ctx, prepared)
+          const diagram = create(prepared)
           if (key) claimLastGood(key, prepared, diagram, lastGood)
           return diagram
         } catch (error) {
-          if (error instanceof MermaidSyntaxError || error instanceof DiagramCanvasSizeError) return undefined
+          if (error instanceof MermaidSyntaxError || error instanceof DiagramCanvasSizeError || error instanceof MermaidConfigError) return undefined
           throw error
         }
       }
-      if (error instanceof DiagramCanvasSizeError) return undefined
+      if (error instanceof DiagramCanvasSizeError || error instanceof MermaidConfigError) return undefined
       throw error
     }
   }
